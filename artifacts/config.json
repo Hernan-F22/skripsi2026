@@ -1,0 +1,25 @@
+{
+  "max_words": 10000,
+  "max_len": 100,
+  "classes": [
+    "Negatif",
+    "Netral",
+    "Positif"
+  ],
+  "title_column": "judul",
+  "body_column": "isi_berita",
+  "label_column": "sentiment",
+  "standard_label_column": "sentiment_standard",
+  "training_rows": 255,
+  "test_accuracy": 0.49019607843137253,
+  "lstm_units": 128,
+  "embedding_dim": 128,
+  "preprocessing": [
+    "case_folding",
+    "cleansing",
+    "stopword_removal",
+    "stemming",
+    "tokenizing",
+    "padding"
+  ]
+}

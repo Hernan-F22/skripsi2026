@@ -1,4 +1,6 @@
-artifacts/
 __pycache__/
 .streamlit/
 *.pyc
+hasil_prediksi_sentimen_idx80.csv
+lampiran_hasil_prediksi_sentimen_idx80_50_baris.csv
+Lampiran_Hasil_Prediksi_Sentimen_IDX80_50_Baris.docx
