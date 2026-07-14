@@ -5,6 +5,7 @@
 Pastikan file dan folder berikut masuk ke repository:
 
 - `app.py`
+- `train_model.py`
 - `requirements.txt`
 - `runtime.txt`
 - `README.md`
@@ -16,6 +17,8 @@ Pastikan file dan folder berikut masuk ke repository:
 
 Folder `artifacts/` wajib ikut di-upload karena aplikasi membutuhkan model LSTM, tokenizer, label encoder, dan konfigurasi model untuk halaman prediksi.
 File `idx80_3000.csv` wajib ikut di-upload jika ingin fitur Batch CSV langsung memakai dataset bawaan tanpa upload manual.
+
+Catatan: Streamlit Cloud menjalankan `app.py` sebagai aplikasi prediksi. Script `train_model.py` hanya digunakan untuk training offline ketika model perlu diperbarui.
 
 ## File yang Tidak Wajib Di-upload
 
