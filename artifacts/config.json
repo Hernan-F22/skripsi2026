@@ -10,8 +10,8 @@
   "body_column": "isi_berita",
   "label_column": "sentiment",
   "standard_label_column": "sentiment_standard",
-  "training_rows": 255,
-  "test_accuracy": 0.49019607843137253,
+  "training_rows": 3000,
+  "test_accuracy": 0.9333333333333333,
   "lstm_units": 128,
   "embedding_dim": 128,
   "preprocessing": [

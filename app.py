@@ -88,7 +88,7 @@ def normalize_sentiment_label(label: str) -> str:
 
 def normalize_columns(data: pd.DataFrame) -> pd.DataFrame:
     data = data.copy()
-    data.columns = [str(column).strip().lower() for column in data.columns]
+    data.columns = [str(column).replace("\ufeff", "").strip().lower() for column in data.columns]
     return data
 
 
@@ -190,6 +190,24 @@ def predict_sentiment(text: str, model, tokenizer, label_encoder, max_len: int) 
             for index, score in enumerate(probabilities)
         },
     }
+
+
+def predict_sentiments(texts: list[str], model, tokenizer, label_encoder, max_len: int) -> pd.DataFrame:
+    cleaned_texts = [clean_text(text) for text in texts]
+    sequences = tokenizer.texts_to_sequences(cleaned_texts)
+    padded = pad_sequences(sequences, maxlen=max_len)
+    probabilities = model.predict(padded, verbose=0)
+    class_indexes = np.argmax(probabilities, axis=1)
+    labels = label_encoder.inverse_transform(class_indexes)
+    confidence = probabilities[np.arange(len(class_indexes)), class_indexes]
+
+    return pd.DataFrame(
+        {
+            "prediksi_sentimen": labels,
+            "confidence": confidence,
+            "clean_text": cleaned_texts,
+        }
+    )
 
 
 def detect_tickers(text: str) -> list[str]:
@@ -311,7 +329,7 @@ def render_prediction_tab():
     artifacts = load_artifacts()
 
     if artifacts is None:
-        st.warning("Belum ada model tersimpan. Latih model terlebih dahulu di tab `Training`.")
+        st.warning("Belum ada model tersimpan. Jalankan training offline melalui notebook terlebih dahulu.")
         return
 
     model, tokenizer, label_encoder, config = artifacts
@@ -357,26 +375,42 @@ def render_batch_tab():
     artifacts = load_artifacts()
 
     if artifacts is None:
-        st.warning("Belum ada model tersimpan. Latih model terlebih dahulu di tab `Training`.")
+        st.warning("Belum ada model tersimpan. Jalankan training offline melalui notebook terlebih dahulu.")
         return
 
     model, tokenizer, label_encoder, config = artifacts
     max_len = int(config["max_len"])
 
-    uploaded_file = st.file_uploader("Upload CSV artikel untuk diprediksi", type=["csv"], key="batch_csv")
-    if uploaded_file is None:
-        st.info("CSV batch sebaiknya memiliki kolom `judul` dan `isi_berita`.")
-        return
+    default_dataset = Path("idx80_3000.csv")
+    source_options = ["Upload CSV"]
+    if default_dataset.exists():
+        source_options.insert(0, "Gunakan dataset bawaan idx80_3000.csv")
 
-    encoding = st.selectbox("Encoding CSV batch", ["utf-8", "latin1", "cp1252"], index=1)
+    source = st.radio("Sumber data batch", source_options, horizontal=True)
+    encoding = st.selectbox("Encoding CSV batch", ["utf-8-sig", "utf-8", "latin1", "cp1252"], index=0)
 
-    try:
-        data = normalize_columns(pd.read_csv(uploaded_file, encoding=encoding))
-    except Exception as exc:
-        st.error(f"CSV gagal dibaca: {exc}")
-        return
+    if source == "Upload CSV":
+        uploaded_file = st.file_uploader("Upload CSV artikel untuk diprediksi", type=["csv"], key="batch_csv")
+        if uploaded_file is None:
+            st.info("CSV batch sebaiknya memiliki kolom `judul` dan `isi_berita`.")
+            return
+
+        try:
+            data = normalize_columns(pd.read_csv(uploaded_file, encoding=encoding))
+        except Exception as exc:
+            st.error(f"CSV gagal dibaca: {exc}")
+            return
+    else:
+        try:
+            data = normalize_columns(pd.read_csv(default_dataset, encoding=encoding))
+        except Exception as exc:
+            st.error(f"Dataset bawaan gagal dibaca: {exc}")
+            return
 
     columns = list(data.columns)
+    st.caption(f"Total data batch: {len(data):,} baris")
+    st.dataframe(data.head(10), use_container_width=True)
+
     title_column = st.selectbox("Kolom judul batch", columns, index=columns.index("judul") if "judul" in columns else 0)
     body_column = st.selectbox(
         "Kolom isi batch",
@@ -384,23 +418,26 @@ def render_batch_tab():
         index=columns.index("isi_berita") if "isi_berita" in columns else 0,
     )
 
-    if not st.button("Prediksi Semua Artikel"):
+    row_limit = st.number_input(
+        "Jumlah baris yang diprediksi",
+        min_value=1,
+        max_value=int(len(data)),
+        value=int(min(len(data), 3000)),
+        step=50,
+    )
+
+    if not st.button("Prediksi Semua Artikel", type="primary"):
         return
 
     with st.spinner("Memproses prediksi batch..."):
-        predictions = []
-        for _, row in data.iterrows():
-            text = f"{row.get(title_column, '')} {row.get(body_column, '')}".strip()
-            result = predict_sentiment(text, model, tokenizer, label_encoder, max_len)
-            predictions.append(
-                {
-                    "prediksi_sentimen": result["label"],
-                    "confidence": result["confidence"],
-                    "ticker_idx80_terdeteksi": ", ".join(detect_tickers(text)),
-                }
-            )
-
-        result_data = pd.concat([data.reset_index(drop=True), pd.DataFrame(predictions)], axis=1)
+        batch_data = data.head(int(row_limit)).copy()
+        texts = [
+            f"{row.get(title_column, '')} {row.get(body_column, '')}".strip()
+            for _, row in batch_data.iterrows()
+        ]
+        predictions = predict_sentiments(texts, model, tokenizer, label_encoder, max_len)
+        predictions["ticker_idx80_terdeteksi"] = [", ".join(detect_tickers(text)) for text in texts]
+        result_data = pd.concat([batch_data.reset_index(drop=True), predictions], axis=1)
 
     st.dataframe(result_data, use_container_width=True)
     st.download_button(
@@ -426,16 +463,19 @@ def render_model_info():
 def main():
     st.set_page_config(page_title=APP_TITLE, page_icon=":chart_with_upwards_trend:", layout="wide")
     st.title(APP_TITLE)
-    st.caption("Metode: preprocessing teks berita, tokenisasi, padding sequence, dan klasifikasi sentimen dengan LSTM.")
+    st.caption(
+        "Metode: preprocessing teks berita, tokenisasi, padding sequence, dan klasifikasi sentimen dengan LSTM. "
+        "Aplikasi menggunakan model tersimpan sehingga pengguna tidak perlu training ulang."
+    )
 
-    tabs = st.tabs(["Prediksi", "Training", "Batch CSV", "Informasi Model"])
+    tabs = st.tabs(["Prediksi", "Informasi Model"])
     with tabs[0]:
-        render_prediction_tab()
+        prediction_tabs = st.tabs(["Artikel Tunggal", "Batch CSV"])
+        with prediction_tabs[0]:
+            render_prediction_tab()
+        with prediction_tabs[1]:
+            render_batch_tab()
     with tabs[1]:
-        render_training_tab()
-    with tabs[2]:
-        render_batch_tab()
-    with tabs[3]:
         render_model_info()
 
 

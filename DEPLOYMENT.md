@@ -8,12 +8,14 @@ Pastikan file dan folder berikut masuk ke repository:
 - `requirements.txt`
 - `runtime.txt`
 - `README.md`
+- `idx80_3000.csv`
 - `artifacts/config.json`
 - `artifacts/label_encoder.pkl`
 - `artifacts/lstm_sentiment_model.keras`
 - `artifacts/tokenizer.pkl`
 
 Folder `artifacts/` wajib ikut di-upload karena aplikasi membutuhkan model LSTM, tokenizer, label encoder, dan konfigurasi model untuk halaman prediksi.
+File `idx80_3000.csv` wajib ikut di-upload jika ingin fitur Batch CSV langsung memakai dataset bawaan tanpa upload manual.
 
 ## File yang Tidak Wajib Di-upload
 

@@ -21,12 +21,12 @@ Dataset dari notebook sebelumnya memakai encoding `latin1`, jadi aplikasi menyed
 
 ## Alur Aplikasi
 
-1. Buka tab `Training`.
-2. Upload dataset CSV.
-3. Pilih kolom judul, isi berita, dan label sentimen.
-4. Atur hyperparameter LSTM.
-5. Klik `Latih dan Simpan Model`.
-6. Buka tab `Prediksi` untuk memprediksi artikel baru.
-7. Gunakan tab `Batch CSV` untuk memprediksi banyak artikel sekaligus.
+1. Buka tab `Prediksi`.
+2. Gunakan mode `Artikel Tunggal` untuk memprediksi satu berita.
+3. Gunakan mode `Batch CSV` untuk memprediksi banyak artikel sekaligus.
+4. Jika file `idx80_3000.csv` tersedia di folder aplikasi, mode batch dapat langsung memakai dataset tersebut tanpa upload manual.
+5. Buka tab `Informasi Model` untuk melihat konfigurasi model yang sedang digunakan.
 
 Model dan artefak pendukung akan tersimpan di folder `artifacts/`.
+
+Catatan: training model tidak ditampilkan sebagai halaman utama aplikasi agar pengguna tidak perlu melatih ulang model saat melakukan prediksi. Jika dataset diperbarui dan model perlu dilatih ulang, jalankan proses training melalui notebook `LSTM_Skripsi.ipynb`, lalu simpan kembali artefak model ke folder `artifacts/`.
