@@ -12,7 +12,7 @@
   "label_column": "sentiment",
   "standard_label_column": "sentiment_standard",
   "training_rows": 3000,
-  "test_accuracy": 0.905,
+  "test_accuracy": 0.9233333333333333,
   "lstm_units": 128,
   "embedding_dim": 128,
   "preprocessing": [
