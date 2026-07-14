@@ -9,11 +9,14 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
+`requirements.txt` dibuat khusus untuk deployment aplikasi agar instalasi di Streamlit Cloud lebih ringan.
+
 ## Training Model
 
 Training dilakukan terpisah dari aplikasi Streamlit. Jalankan script ini hanya ketika dataset atau model perlu diperbarui:
 
 ```bash
+pip install -r requirements-train.txt
 python train_model.py
 ```
 

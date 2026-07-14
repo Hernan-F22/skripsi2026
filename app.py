@@ -6,8 +6,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import streamlit as st
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 try:
     from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
@@ -21,7 +19,6 @@ APP_TITLE = "Prediksi Sentimen Saham IDX80 Berbasis Artikel Berita"
 ARTIFACT_DIR = Path("artifacts")
 MODEL_PATH = ARTIFACT_DIR / "lstm_sentiment_model.keras"
 TOKENIZER_PATH = ARTIFACT_DIR / "tokenizer.pkl"
-LABEL_ENCODER_PATH = ARTIFACT_DIR / "label_encoder.pkl"
 CONFIG_PATH = ARTIFACT_DIR / "config.json"
 DEFAULT_BATCH_DATASET = Path("idx80_3000.csv")
 
@@ -78,48 +75,57 @@ def detect_tickers(text: str) -> list[str]:
 
 @st.cache_resource
 def load_artifacts():
-    required_paths = [MODEL_PATH, TOKENIZER_PATH, LABEL_ENCODER_PATH, CONFIG_PATH]
+    required_paths = [MODEL_PATH, TOKENIZER_PATH, CONFIG_PATH]
     if not all(path.exists() for path in required_paths):
         return None
+
+    from tensorflow.keras.models import load_model
 
     model = load_model(MODEL_PATH)
 
     with TOKENIZER_PATH.open("rb") as file:
         tokenizer = pickle.load(file)
 
-    with LABEL_ENCODER_PATH.open("rb") as file:
-        label_encoder = pickle.load(file)
-
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    return model, tokenizer, label_encoder, config
+    classes = config["classes"]
+    return model, tokenizer, classes, config
 
 
-def predict_sentiment(text: str, model, tokenizer, label_encoder, max_len: int) -> dict:
+def pad_text_sequences(sequences: list[list[int]], max_len: int) -> np.ndarray:
+    padded = np.zeros((len(sequences), max_len), dtype=np.int32)
+    for row_index, sequence in enumerate(sequences):
+        truncated = sequence[-max_len:]
+        if truncated:
+            padded[row_index, -len(truncated):] = truncated
+    return padded
+
+
+def predict_sentiment(text: str, model, tokenizer, classes: list[str], max_len: int) -> dict:
     cleaned = clean_text(text)
     sequence = tokenizer.texts_to_sequences([cleaned])
-    padded = pad_sequences(sequence, maxlen=max_len)
+    padded = pad_text_sequences(sequence, max_len)
     probabilities = model.predict(padded, verbose=0)[0]
     class_index = int(np.argmax(probabilities))
-    label = label_encoder.inverse_transform([class_index])[0]
+    label = classes[class_index]
 
     return {
         "clean_text": cleaned,
         "label": label,
         "confidence": float(probabilities[class_index]),
         "probabilities": {
-            label_encoder.inverse_transform([index])[0]: float(score)
+            classes[index]: float(score)
             for index, score in enumerate(probabilities)
         },
     }
 
 
-def predict_sentiments(texts: list[str], model, tokenizer, label_encoder, max_len: int) -> pd.DataFrame:
+def predict_sentiments(texts: list[str], model, tokenizer, classes: list[str], max_len: int) -> pd.DataFrame:
     cleaned_texts = [clean_text(text) for text in texts]
     sequences = tokenizer.texts_to_sequences(cleaned_texts)
-    padded = pad_sequences(sequences, maxlen=max_len)
+    padded = pad_text_sequences(sequences, max_len)
     probabilities = model.predict(padded, verbose=0)
     class_indexes = np.argmax(probabilities, axis=1)
-    labels = label_encoder.inverse_transform(class_indexes)
+    labels = [classes[index] for index in class_indexes]
     confidence = probabilities[np.arange(len(class_indexes)), class_indexes]
 
     return pd.DataFrame(
@@ -133,14 +139,10 @@ def predict_sentiments(texts: list[str], model, tokenizer, label_encoder, max_le
 
 def render_prediction_tab():
     st.subheader("Prediksi Sentimen Artikel")
-    artifacts = load_artifacts()
 
-    if artifacts is None:
+    if not all(path.exists() for path in [MODEL_PATH, TOKENIZER_PATH, CONFIG_PATH]):
         st.warning("Belum ada model tersimpan. Jalankan `python train_model.py` terlebih dahulu.")
         return
-
-    model, tokenizer, label_encoder, config = artifacts
-    max_len = int(config["max_len"])
 
     article_title = st.text_input("Judul artikel")
     article_body = st.text_area("Isi artikel berita", height=220)
@@ -152,7 +154,14 @@ def render_prediction_tab():
             st.error("Masukkan judul atau isi artikel terlebih dahulu.")
             return
 
-        result = predict_sentiment(article_text, model, tokenizer, label_encoder, max_len)
+        with st.spinner("Memuat model dan memprediksi sentimen..."):
+            artifacts = load_artifacts()
+            if artifacts is None:
+                st.error("Artefak model belum lengkap.")
+                return
+            model, tokenizer, classes, config = artifacts
+            result = predict_sentiment(article_text, model, tokenizer, classes, int(config["max_len"]))
+
         detected = detect_tickers(article_text)
         tickers = detected if selected_ticker == "Otomatis dari teks" else [selected_ticker]
 
@@ -179,14 +188,10 @@ def render_prediction_tab():
 
 def render_batch_tab():
     st.subheader("Prediksi Batch CSV")
-    artifacts = load_artifacts()
 
-    if artifacts is None:
+    if not all(path.exists() for path in [MODEL_PATH, TOKENIZER_PATH, CONFIG_PATH]):
         st.warning("Belum ada model tersimpan. Jalankan `python train_model.py` terlebih dahulu.")
         return
-
-    model, tokenizer, label_encoder, config = artifacts
-    max_len = int(config["max_len"])
 
     source_options = ["Upload CSV"]
     if DEFAULT_BATCH_DATASET.exists():
@@ -227,7 +232,7 @@ def render_batch_tab():
         "Jumlah baris yang diprediksi",
         min_value=1,
         max_value=int(len(data)),
-        value=int(min(len(data), 3000)),
+        value=int(min(len(data), 100)),
         step=50,
     )
 
@@ -235,12 +240,17 @@ def render_batch_tab():
         return
 
     with st.spinner("Memproses prediksi batch..."):
+        artifacts = load_artifacts()
+        if artifacts is None:
+            st.error("Artefak model belum lengkap.")
+            return
+        model, tokenizer, classes, config = artifacts
         batch_data = data.head(int(row_limit)).copy()
         texts = [
             f"{row.get(title_column, '')} {row.get(body_column, '')}".strip()
             for _, row in batch_data.iterrows()
         ]
-        predictions = predict_sentiments(texts, model, tokenizer, label_encoder, max_len)
+        predictions = predict_sentiments(texts, model, tokenizer, classes, int(config["max_len"]))
         predictions["ticker_idx80_terdeteksi"] = [", ".join(detect_tickers(text)) for text in texts]
         result_data = pd.concat([batch_data.reset_index(drop=True), predictions], axis=1)
 
@@ -255,13 +265,12 @@ def render_batch_tab():
 
 def render_model_info():
     st.subheader("Informasi Model")
-    artifacts = load_artifacts()
 
-    if artifacts is None:
+    if not CONFIG_PATH.exists():
         st.info("Model belum tersedia.")
         return
 
-    _, _, _, config = artifacts
+    config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     st.json(config)
 
 
