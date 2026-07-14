@@ -1,4 +1,4 @@
 import streamlit as st
+import tensorflow as tf
 
-st.title("Hello")
-st.success("Streamlit OK")
+st.write(tf.__version__)
