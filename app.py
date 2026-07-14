@@ -1,5 +1,4 @@
 import json
-import pickle
 import re
 from pathlib import Path
 
@@ -17,8 +16,8 @@ except ImportError:
 
 APP_TITLE = "Prediksi Sentimen Saham IDX80 Berbasis Artikel Berita"
 ARTIFACT_DIR = Path("artifacts")
-MODEL_PATH = ARTIFACT_DIR / "lstm_sentiment_model.keras"
-TOKENIZER_PATH = ARTIFACT_DIR / "tokenizer.pkl"
+MODEL_WEIGHTS_PATH = ARTIFACT_DIR / "lstm_weights.npz"
+TOKENIZER_JSON_PATH = ARTIFACT_DIR / "tokenizer.json"
 CONFIG_PATH = ARTIFACT_DIR / "config.json"
 DEFAULT_BATCH_DATASET = Path("idx80_3000.csv")
 
@@ -75,20 +74,90 @@ def detect_tickers(text: str) -> list[str]:
 
 @st.cache_resource
 def load_artifacts():
-    required_paths = [MODEL_PATH, TOKENIZER_PATH, CONFIG_PATH]
+    required_paths = [MODEL_WEIGHTS_PATH, TOKENIZER_JSON_PATH, CONFIG_PATH]
     if not all(path.exists() for path in required_paths):
         return None
 
-    from tensorflow.keras.models import load_model
-
-    model = load_model(MODEL_PATH)
-
-    with TOKENIZER_PATH.open("rb") as file:
-        tokenizer = pickle.load(file)
-
+    weights = np.load(MODEL_WEIGHTS_PATH)
+    tokenizer = SimpleTokenizer(json.loads(TOKENIZER_JSON_PATH.read_text(encoding="utf-8")))
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     classes = config["classes"]
+    model = NumpyLSTMClassifier(weights)
     return model, tokenizer, classes, config
+
+
+class SimpleTokenizer:
+    def __init__(self, tokenizer_data: dict):
+        self.word_index = tokenizer_data["word_index"]
+        self.num_words = tokenizer_data.get("num_words")
+        self.oov_token = tokenizer_data.get("oov_token")
+        self.oov_index = self.word_index.get(self.oov_token) if self.oov_token else None
+
+    def texts_to_sequences(self, texts: list[str]) -> list[list[int]]:
+        return [self.text_to_sequence(text) for text in texts]
+
+    def text_to_sequence(self, text: str) -> list[int]:
+        sequence = []
+        for word in str(text).split():
+            index = self.word_index.get(word)
+            if index is None:
+                if self.oov_index is not None:
+                    sequence.append(self.oov_index)
+                continue
+            if self.num_words is not None and index >= self.num_words:
+                if self.oov_index is not None:
+                    sequence.append(self.oov_index)
+                continue
+            sequence.append(index)
+        return sequence
+
+
+class NumpyLSTMClassifier:
+    def __init__(self, weights):
+        self.embedding = weights["embedding"].astype(np.float32)
+        self.lstm_kernel = weights["lstm_kernel"].astype(np.float32)
+        self.lstm_recurrent_kernel = weights["lstm_recurrent_kernel"].astype(np.float32)
+        self.lstm_bias = weights["lstm_bias"].astype(np.float32)
+        self.dense_kernel = weights["dense_kernel"].astype(np.float32)
+        self.dense_bias = weights["dense_bias"].astype(np.float32)
+        self.output_kernel = weights["output_kernel"].astype(np.float32)
+        self.output_bias = weights["output_bias"].astype(np.float32)
+        self.units = self.lstm_recurrent_kernel.shape[0]
+
+    def predict(self, padded_sequences: np.ndarray, verbose: int = 0) -> np.ndarray:
+        del verbose
+        embedded = self.embedding[padded_sequences]
+        batch_size = embedded.shape[0]
+        hidden_state = np.zeros((batch_size, self.units), dtype=np.float32)
+        cell_state = np.zeros((batch_size, self.units), dtype=np.float32)
+
+        for timestep in range(embedded.shape[1]):
+            gates = (
+                embedded[:, timestep, :] @ self.lstm_kernel
+                + hidden_state @ self.lstm_recurrent_kernel
+                + self.lstm_bias
+            )
+            input_gate, forget_gate, candidate, output_gate = np.split(gates, 4, axis=1)
+            input_gate = sigmoid(input_gate)
+            forget_gate = sigmoid(forget_gate)
+            candidate = np.tanh(candidate)
+            output_gate = sigmoid(output_gate)
+            cell_state = forget_gate * cell_state + input_gate * candidate
+            hidden_state = output_gate * np.tanh(cell_state)
+
+        dense = np.maximum(hidden_state @ self.dense_kernel + self.dense_bias, 0)
+        logits = dense @ self.output_kernel + self.output_bias
+        return softmax(logits)
+
+
+def sigmoid(values: np.ndarray) -> np.ndarray:
+    return 1.0 / (1.0 + np.exp(-np.clip(values, -60, 60)))
+
+
+def softmax(values: np.ndarray) -> np.ndarray:
+    shifted = values - np.max(values, axis=1, keepdims=True)
+    exp_values = np.exp(shifted)
+    return exp_values / np.sum(exp_values, axis=1, keepdims=True)
 
 
 def pad_text_sequences(sequences: list[list[int]], max_len: int) -> np.ndarray:
@@ -140,7 +209,7 @@ def predict_sentiments(texts: list[str], model, tokenizer, classes: list[str], m
 def render_prediction_tab():
     st.subheader("Prediksi Sentimen Artikel")
 
-    if not all(path.exists() for path in [MODEL_PATH, TOKENIZER_PATH, CONFIG_PATH]):
+    if not all(path.exists() for path in [MODEL_WEIGHTS_PATH, TOKENIZER_JSON_PATH, CONFIG_PATH]):
         st.warning("Belum ada model tersimpan. Jalankan `python train_model.py` terlebih dahulu.")
         return
 
@@ -189,7 +258,7 @@ def render_prediction_tab():
 def render_batch_tab():
     st.subheader("Prediksi Batch CSV")
 
-    if not all(path.exists() for path in [MODEL_PATH, TOKENIZER_PATH, CONFIG_PATH]):
+    if not all(path.exists() for path in [MODEL_WEIGHTS_PATH, TOKENIZER_JSON_PATH, CONFIG_PATH]):
         st.warning("Belum ada model tersimpan. Jalankan `python train_model.py` terlebih dahulu.")
         return
 

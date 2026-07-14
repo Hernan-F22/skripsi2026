@@ -26,9 +26,11 @@ except ImportError:
 ARTIFACT_DIR = Path("artifacts")
 MODEL_PATH = ARTIFACT_DIR / "lstm_sentiment_model.keras"
 TOKENIZER_PATH = ARTIFACT_DIR / "tokenizer.pkl"
+TOKENIZER_JSON_PATH = ARTIFACT_DIR / "tokenizer.json"
 LABEL_ENCODER_PATH = ARTIFACT_DIR / "label_encoder.pkl"
 CONFIG_PATH = ARTIFACT_DIR / "config.json"
 METRICS_PATH = ARTIFACT_DIR / "metrics.json"
+WEIGHTS_PATH = ARTIFACT_DIR / "lstm_weights.npz"
 
 TITLE_COLUMN = "judul"
 BODY_COLUMN = "isi_berita"
@@ -154,8 +156,36 @@ def save_artifacts(model, tokenizer, label_encoder, config: dict, metrics: dict)
     with TOKENIZER_PATH.open("wb") as file:
         pickle.dump(tokenizer, file)
 
+    TOKENIZER_JSON_PATH.write_text(
+        json.dumps(
+            {
+                "word_index": tokenizer.word_index,
+                "num_words": tokenizer.num_words,
+                "oov_token": tokenizer.oov_token,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
     with LABEL_ENCODER_PATH.open("wb") as file:
         pickle.dump(label_encoder, file)
+
+    embedding_weights = model.layers[0].get_weights()[0]
+    lstm_kernel, lstm_recurrent_kernel, lstm_bias = model.layers[1].get_weights()
+    dense_kernel, dense_bias = model.layers[3].get_weights()
+    output_kernel, output_bias = model.layers[4].get_weights()
+    np.savez_compressed(
+        WEIGHTS_PATH,
+        embedding=embedding_weights,
+        lstm_kernel=lstm_kernel,
+        lstm_recurrent_kernel=lstm_recurrent_kernel,
+        lstm_bias=lstm_bias,
+        dense_kernel=dense_kernel,
+        dense_bias=dense_bias,
+        output_kernel=output_kernel,
+        output_bias=output_bias,
+    )
 
     CONFIG_PATH.write_text(json.dumps(config, indent=2), encoding="utf-8")
     METRICS_PATH.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
@@ -246,7 +276,9 @@ def train(args):
     print(f"Akurasi data uji: {accuracy:.4f}")
     print(f"Model tersimpan di: {MODEL_PATH}")
     print(f"Tokenizer tersimpan di: {TOKENIZER_PATH}")
+    print(f"Tokenizer JSON tersimpan di: {TOKENIZER_JSON_PATH}")
     print(f"Label encoder tersimpan di: {LABEL_ENCODER_PATH}")
+    print(f"Bobot NumPy tersimpan di: {WEIGHTS_PATH}")
     print(f"Config tersimpan di: {CONFIG_PATH}")
     print(f"Metrics tersimpan di: {METRICS_PATH}")
 

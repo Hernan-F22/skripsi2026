@@ -33,12 +33,14 @@ File yang dihasilkan:
 - `artifacts/lstm_sentiment_model.keras`
 - `artifacts/tokenizer.pkl`
 - `artifacts/label_encoder.pkl`
+- `artifacts/lstm_weights.npz`
+- `artifacts/tokenizer.json`
 - `artifacts/config.json`
 - `artifacts/metrics.json`
 
 ## Aplikasi Streamlit
 
-`app.py` hanya digunakan untuk prediksi. File ini memuat model, tokenizer, label encoder, dan konfigurasi dari folder `artifacts/`. Di dalam `app.py` tidak ada proses training ulang, pembuatan arsitektur LSTM, `model.fit()`, atau `model.save()`.
+`app.py` hanya digunakan untuk prediksi. File ini memuat bobot model NumPy, tokenizer JSON, dan konfigurasi dari folder `artifacts/`. Di dalam `app.py` tidak ada TensorFlow/Keras, proses training ulang, pembuatan arsitektur LSTM, `model.fit()`, atau `model.save()`.
 
 ## Format Dataset Training
 

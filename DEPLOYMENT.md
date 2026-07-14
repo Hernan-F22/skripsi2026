@@ -11,16 +11,15 @@ Pastikan file dan folder berikut masuk ke repository:
 - `README.md`
 - `idx80_3000.csv`
 - `artifacts/config.json`
-- `artifacts/label_encoder.pkl`
-- `artifacts/lstm_sentiment_model.keras`
-- `artifacts/tokenizer.pkl`
+- `artifacts/lstm_weights.npz`
+- `artifacts/tokenizer.json`
 
-Folder `artifacts/` wajib ikut di-upload karena aplikasi membutuhkan model LSTM, tokenizer, dan konfigurasi model untuk halaman prediksi.
+Folder `artifacts/` wajib ikut di-upload karena aplikasi membutuhkan bobot LSTM NumPy, tokenizer JSON, dan konfigurasi model untuk halaman prediksi.
 File `idx80_3000.csv` wajib ikut di-upload jika ingin fitur Batch CSV langsung memakai dataset bawaan tanpa upload manual.
 
 Catatan: Streamlit Cloud menjalankan `app.py` sebagai aplikasi prediksi. Script `train_model.py` hanya digunakan untuk training offline ketika model perlu diperbarui.
 
-`requirements.txt` sengaja dibuat lebih ringan untuk Streamlit Cloud. Dependency training seperti `scikit-learn` dan `matplotlib` dipindahkan ke `requirements-train.txt`.
+`requirements.txt` sengaja dibuat ringan untuk Streamlit Cloud. Aplikasi tidak memakai TensorFlow/Keras saat deployment. Dependency training seperti `tensorflow-cpu`, `scikit-learn`, dan `matplotlib` dipindahkan ke `requirements-train.txt`.
 
 ## File yang Tidak Wajib Di-upload
 
